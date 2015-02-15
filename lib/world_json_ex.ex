@@ -1,7 +1,9 @@
 defmodule WorldJson.Compiler do
   defmacro compile(pattern, parent, prepend \\ true) do
     {:ok, dir} = :application.get_env(:world_json, :geo_files)
-    files = :filelib.wildcard(dir ++ '/world_geo_json/' ++ pattern)
+    fallback = :filename.dirname(:filename.dirname(dir)) ++ '/world_geo_json/'
+    files = :filelib.wildcard(dir ++ '/world_geo_json/' ++ pattern) ++
+      :filelib.wildcard(fallback ++ pattern)
     subregions = for file <- files do
       name = :erlang.list_to_binary(:filename.basename(file, '.geo.json'))
       if prepend, do: parent <> "-" <> name, else: name
