@@ -10,7 +10,7 @@ defmodule WorldJson.Compiler do
     end
     subs = quote do
       def subregions(unquote(parent)) do
-        unquote(subregions)
+        {:ok, unquote(subregions)}
       end
     end
     regs = for file <- files do
