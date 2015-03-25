@@ -1,0 +1,173 @@
+#!/usr/bin/env elixir -pa _build/dev/lib/*/ebin
+
+require Poison
+
+defmodule WorldJson.Compiler do
+  @name "Elixir.WorldJson"
+
+  @map_contents "contents"
+  @map_features "features"
+  @map_parent "parent"
+
+  defmodule WorldJson.Compiler.Props do
+    defstruct id: nil
+  end
+
+  defimpl Poison.Encoder, for: WorldJson.Compiler.Props do
+    def encode(val, _options) do
+      ["___PROPS___Props(", :io_lib.format("~p", [val.id]), ")___PROPS___"]
+    end
+  end
+
+  def filename(name) do
+    "src/" <> name <> ".erl"
+  end
+
+  def files(wildcard) do
+    :filelib.wildcard(wildcard) |>
+      Enum.map(&read/1)
+  end
+
+  defp read(file) do
+    contents = File.read!(file) |> Poison.decode!
+    id = :filename.basename(file, ".topojson")
+    {id, contents}
+  end
+
+  def code(wildcard) do
+    files = files(wildcard)
+    main = {filename(@name),
+            Enum.map([
+              module(@name),
+              exports([{@map_contents, 1},
+                       {@map_contents, 2},
+                       {@map_features, 1},
+                       {@map_parent, 1}]),
+              contents(files),
+              contents_ref(files),
+              features(files),
+              parent(files),
+              default_props(files)
+            ], fn(statement) ->
+              [statement, "\n\n"]
+            end)}
+    [main | Enum.map(files, &content_file/1)]
+  end
+
+  def content_file({id, contents}) do
+    name = @name <> "." <> id
+    {filename(name),
+     Enum.map([
+       module(name),
+       exports([{@map_contents, 1}]),
+       format_contents(contents)
+     ], fn(line) ->
+       [line, "\n\n"]
+     end)}
+  end
+
+  def module(name) do
+    ["-module('", name, "')."]
+  end
+
+  def exports(fns) do
+    ["-export([", Enum.map_join(fns, ", ", fn({name, arity}) ->
+      [name, "/", to_string(arity)]
+    end), "])."]
+  end
+
+  def contents(_) do
+    [@map_contents, "(Val) -> ", @map_contents, "(Val, fun default_props/1)."]
+  end
+
+  def contents_ref(files) do
+    [int_to_bin(@map_contents, 2),
+     Enum.map(files, &format_contents_ref/1),
+     to_nil(@map_contents, 2)]
+  end
+
+  def format_contents_ref({parent, _}) do
+    [@map_contents, "(", to_bin(parent), ", Props) -> 'Elixir.WorldJson.", parent, "':", @map_contents, "(Props);\n"]
+  end
+
+  def format_contents(obj) do
+    map = add_props(obj) |> encode_props
+    [@map_contents, "(Props) -> ", map, "."]
+  end
+
+  def add_props(map = %{"objects" => objects = %{"regions" => regions = %{"geometries" => geometries}}}) do
+    geos = Enum.map(geometries, fn(geo = %{"id" => id}) ->
+      Dict.put(geo, "properties", %WorldJson.Compiler.Props{:id => to_string(id)})
+    end)
+    %{map | "objects" => %{objects | "regions" => %{regions | "geometries" => geos}}}
+  end
+
+  def encode_props(map) do
+    ['[', Poison.encode!(map) |>
+      String.split("___PROPS___") |>
+      Enum.map(fn
+        (<<"Props(", _ :: binary>> = call) ->
+          [",'Elixir.Poison':'encode!'(", call, "),"]
+        (chunk) ->
+          :io_lib.format("~p", [chunk])
+      end), ']']
+  end
+
+  def features(files) do
+    [int_to_bin(@map_features),
+     Enum.map(files, &format_feature/1),
+     to_nil(@map_features)]
+  end
+
+  def format_feature({parent, %{"objects" => %{"regions" => %{"geometries" => regions}}}}) do
+    [@map_features, "(", to_bin(parent), ") -> [", Enum.map_join(regions, ",", fn(%{"id" => id}) ->
+      to_bin(id)
+    end), "];\n"]
+  end
+
+  def parent(files) do
+    [int_to_bin(@map_parent),
+     Enum.map(files, &format_parent/1),
+     to_nil(@map_parent)]
+  end
+
+  def format_parent({parent, %{"objects" => %{"regions" => %{"geometries" => regions}}}}) do
+    ## TODO filter out duplicate values
+    {mappings, _} = Enum.map_reduce(regions, HashSet.new, fn(%{"id" => id}, set) ->
+      if Set.member?(set, id) do
+        {"", set}
+      else
+        {[@map_parent, "(", to_bin(id), ") -> ", to_bin(parent), ";\n"], Set.put(set, id)}
+      end
+    end)
+    mappings
+  end
+
+  def default_props(_) do
+    ["default_props(_) -> nil."]
+  end
+
+  def to_bin(val) do
+    :io_lib.format("~p", [to_string(val)])
+  end
+
+  def int_to_bin(mod, arity \\ 1)
+  def int_to_bin(mod, 1) do
+    [mod, "(Val) when is_integer(Val) -> ", mod, "(integer_to_binary(Val));\n"]
+  end
+  def int_to_bin(mod, 2) do
+    [mod, "(Val, Fun) when is_integer(Val) -> ", mod, "(integer_to_binary(Val), Fun);\n"]
+  end
+
+  def to_nil(mod, arity \\ 1)
+  def to_nil(mod, 1) do
+    [mod, "(_) -> nil."]
+  end
+  def to_nil(mod, 2) do
+    [mod, "(_, _) -> nil."]
+  end
+end
+
+Enum.map(WorldJson.Compiler.code('topojson/*.topojson'), fn({filename, contents}) ->
+  File.write!(filename, contents)
+end)

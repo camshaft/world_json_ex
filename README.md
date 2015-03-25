@@ -1,4 +1,4 @@
 world_json
 ===========
 
-geo.json formats for elixir/erlang. sources provided by [world.geo.json](https://github.com/johan/world.geo.json).
+topojson country and state/province collections for elixir/erlang. sources provided by [world-json](https://github.com/camshaft/world-json).
