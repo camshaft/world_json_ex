@@ -3,7 +3,7 @@ defmodule WorldJson.Mixfile do
 
   def project do
     [app: :world_json,
-     version: "0.1.1",
+     version: "0.1.2",
      elixir: "~> 1.0",
      description: "topojson country and state/province collections for elixir/erlang",
      package: package,
