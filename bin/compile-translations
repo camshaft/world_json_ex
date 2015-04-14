@@ -1,0 +1,85 @@
+#!/usr/bin/env elixir -pa _build/dev/lib/*/ebin
+
+require Poison
+
+defmodule WorldJson.TranslationCompiler do
+  @name "Elixir.WorldJson.Locale"
+
+  def filename(name) do
+    "lib/" <> name <> ".ex"
+  end
+
+  def files(wildcard) do
+    :filelib.wildcard(wildcard) |>
+      Enum.map(&read/1)
+  end
+
+  defp read(file) do
+    contents = File.read!(file)
+    id = :filename.basename(file, ".json")
+    {id, contents}
+  end
+
+  def code(wildcard) do
+    files = files(wildcard)
+    {modules, clauses} = Enum.map_reduce(files, [], &compile/2)
+    [{filename(@name), compile_resolve(clauses)} | modules]
+  end
+
+  def compile({filename, contents}, clauses) do
+    {name, id, locale} = name(filename)
+    mod = {filename(name), Macro.to_string(quote do
+      defmodule unquote(String.to_atom(name)) do
+        def localize do
+          unquote(contents)
+        end
+      end
+    end)}
+
+    clause = quote do
+      def localize(unquote(id), [unquote(locale) | _]) do
+        unquote(String.to_atom(name)).localize()
+      end
+    end
+    {mod, [clause | clauses]}
+  end
+
+  def compile_resolve(clauses) do
+    Macro.to_string(quote do
+      defmodule unquote(String.to_atom(@name)) do
+        def localize(id) do
+          localize(id, ["en"])
+        end
+
+        def localize(id, []) do
+          localize(id, ["en"])
+        end
+        def localize(id, locale) when is_binary(locale) do
+          localize(id, [locale])
+        end
+        unquote(clauses)
+        def localize(id, [_ | locales]) do
+          localize(id, locales)
+        end
+        def localize(id, _) do
+          {:error, :not_found}
+        end
+      end
+    end)
+  end
+
+  def name(id) do
+    case String.split(id, ".") do
+      [id] ->
+        {@name <> "." <> id, id, quote do
+          _
+        end}
+      [id, locale] ->
+        {@name <> "." <> id <> "." <> String.upcase(locale), id, locale}
+    end
+  end
+end
+
+Enum.map(WorldJson.TranslationCompiler.code('translations/*.json'), fn({filename, contents}) ->
+  File.write!(filename, contents)
+end)

@@ -19,7 +19,7 @@ defmodule WorldJson.Mixfile do
   end
 
   defp package do
-    [files: ["src", "mix.exs", "README*"],
+    [files: ["src", "lib", "mix.exs", "README*"],
      contributors: ["Cameron Bytheway"],
      licenses: ["MIT"],
      links: %{"GitHub" => "https://github.com/camshaft/world_json_ex"}]

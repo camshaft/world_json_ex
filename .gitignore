@@ -3,4 +3,7 @@
 erl_crash.dump
 *.ez
 src
+lib
 topojson*
+translations*
+mix.lock
