@@ -61,7 +61,7 @@ defmodule WorldJson.TranslationCompiler do
         def localize(id, [_ | locales]) do
           localize(id, locales)
         end
-        def localize(id, _) do
+        def localize(_id, _) do
           {:error, :not_found}
         end
       end
