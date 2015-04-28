@@ -1,4 +1,4 @@
-WORLD_JSON_VERSION?=0.1.1
+WORLD_JSON_VERSION?=0.1.2
 
 src: topojson translations
 	./bin/compile
